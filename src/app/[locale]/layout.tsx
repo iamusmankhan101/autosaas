@@ -54,14 +54,20 @@ export default async function LocaleLayout({
 
   return (
     <html lang={locale} dir={isRtl ? 'rtl' : 'ltr'} className={`${inter.variable} ${notoNastaliqUrdu.variable} ${notoNaskhArabic.variable} h-full antialiased`}>
-      <body className="min-h-full flex flex-col bg-background text-foreground bg-slate-50 dark:bg-slate-950 font-sans">
+      <body className="min-h-full flex items-center justify-center bg-[#f0ebe6] dark:bg-slate-950 font-sans p-3 md:p-4 lg:p-6 xl:p-8 relative overflow-hidden text-foreground">
+        
+        {/* Soft Background Mesh for Premium Feel */}
+        <div className="absolute top-0 right-0 w-[40vw] h-[40vw] bg-[#ffdec2] dark:bg-[#4a2e1d] rounded-full blur-[120px] opacity-60 pointer-events-none -translate-y-1/4 translate-x-1/4"></div>
+        <div className="absolute bottom-0 left-0 w-[40vw] h-[40vw] bg-[#e1d5cc] dark:bg-[#202738] rounded-full blur-[120px] opacity-60 pointer-events-none translate-y-1/4 -translate-x-1/4"></div>
+        
         <NextIntlClientProvider messages={messages}>
-          <div className="flex h-screen overflow-hidden">
+          {/* Floating Application Shell */}
+          <div className="relative w-full h-full max-h-[1080px] max-w-[1600px] mx-auto bg-white/95 dark:bg-slate-900/95 backdrop-blur-xl rounded-[2.5rem] shadow-[0_20px_50px_-12px_rgba(0,0,0,0.1)] flex overflow-hidden ring-1 ring-black/5 dark:ring-white/10">
             <Sidebar />
-            <div className="flex-1 flex flex-col min-w-0 overflow-hidden">
+            <div className="flex-1 flex flex-col min-w-0 overflow-hidden relative pb-6 bg-[#fcfcfd] dark:bg-[#0f172a]">
               <Header />
-              <main className="flex-1 overflow-y-auto w-full">
-                <div className="container mx-auto p-4 md:p-6 lg:p-8 max-w-7xl">
+              <main className="flex-1 overflow-y-auto overflow-x-hidden w-full scrollbar-none custom-scrollbar">
+                <div className="px-6 md:px-8 lg:px-10 h-full">
                   {children}
                 </div>
               </main>
