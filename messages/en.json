@@ -1,0 +1,18 @@
+{
+  "Index": {
+    "title": "MistryApp",
+    "subtitle": "Lahore's Digital Workshop Companion",
+    "dashboard": "Dashboard",
+    "khata": "Digital Khata",
+    "jobs": "Job Cards",
+    "inventory": "Inventory",
+    "settings": "Settings",
+    "language": "اردو"
+  },
+  "Khata": {
+    "title": "Digital Khata",
+    "total_udhaar": "Total Udhaar",
+    "add_customer": "Add Customer",
+    "remind_whatsapp": "Send Reminder"
+  }
+}
