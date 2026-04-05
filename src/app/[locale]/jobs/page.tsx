@@ -9,7 +9,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/u
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import {
   PlusCircle, Camera, Wrench, Car, CheckCircle2,
-  Clock, PackageCheck, Truck, X, Plus, Trash2, ConciergeBell,
+  Clock, PackageCheck, Truck, X, Plus, Trash2, ConciergeBell, User,
 } from 'lucide-react';
 import { useState } from 'react';
 import { cn } from '@/lib/utils';
@@ -30,6 +30,7 @@ const emptyForm = {
   vehicle_make: '', vehicle_model: '', license_plate: '',
   advance_paid: '', status: 'PENDING' as Status,
   services: [] as JobService[],
+  assignedStaff: '',
 };
 
 export default function JobsPage() {
@@ -49,6 +50,12 @@ export default function JobsPage() {
   const catalog = useLiveQuery(() =>
     db.service_catalog.toArray().then(s => s.sort((a, b) => a.name.localeCompare(b.name)))
   );
+
+  const activeStaff = useLiveQuery(() =>
+    db.staff.filter(s => s.active).toArray().then(s => s.sort((a, b) => a.name.localeCompare(b.name)))
+  );
+
+  const allTasks = useLiveQuery(() => db.workflow_tasks.toArray());
 
   const jobs = (allJobs ?? []).filter(j =>
     filterStatus === 'ALL' ? j.status !== 'DELIVERED' : j.status === filterStatus
@@ -83,8 +90,9 @@ export default function JobsPage() {
   // ── create job ──
   const handleCreate = async () => {
     if (!form.vehicle_make.trim() || !form.license_plate.trim()) return;
+    const jobId = crypto.randomUUID();
     await db.jobs.add({
-      id: crypto.randomUUID(),
+      id: jobId,
       customer_id: '',
       vehicle_make: form.vehicle_make.trim(),
       vehicle_model: form.vehicle_model.trim(),
@@ -96,14 +104,42 @@ export default function JobsPage() {
       created_at: Date.now(),
       updated_at: Date.now(),
     });
+
+    // Auto-create a workflow task linked to this job
+    const taskStatus =
+      form.status === 'IN_PROGRESS' ? 'IN_PROGRESS' :
+      form.status === 'READY' || form.status === 'DELIVERED' ? 'DONE' : 'TODO';
+    await db.workflow_tasks.add({
+      id: crypto.randomUUID(),
+      job_id: jobId,
+      title: `${form.vehicle_make.trim()} ${form.vehicle_model.trim()} — ${form.license_plate.trim().toUpperCase()}`,
+      mechanic: form.assignedStaff,
+      priority: 'MEDIUM',
+      status: taskStatus,
+      created_at: Date.now(),
+      updated_at: Date.now(),
+    });
+
     setForm(emptyForm);
     setNewSvc({ catalogId: '', price: '' });
     setCreateOpen(false);
   };
 
-  // ── status update ──
+  // ── status update (syncs workflow tasks) ──
   const handleStatusChange = async (job: JobCard, status: Status) => {
     await db.jobs.update(job.id, { status, updated_at: Date.now() });
+
+    // Sync linked workflow tasks
+    const linkedTasks = await db.workflow_tasks.filter(t => t.job_id === job.id).toArray();
+    if (linkedTasks.length > 0) {
+      const taskStatus =
+        status === 'DELIVERED' || status === 'READY' ? 'DONE' :
+        status === 'IN_PROGRESS' ? 'IN_PROGRESS' : 'TODO';
+      await Promise.all(
+        linkedTasks.map(t => db.workflow_tasks.update(t.id, { status: taskStatus, updated_at: Date.now() }))
+      );
+    }
+
     setUpdateJob(null);
   };
 
@@ -277,6 +313,14 @@ export default function JobsPage() {
                       {job.vehicle_make} {job.vehicle_model}
                     </p>
                     <p className="font-mono text-xs text-slate-400 mt-0.5">{job.license_plate}</p>
+                    {(() => {
+                      const mechanic = (allTasks ?? []).find(t => t.job_id === job.id && t.mechanic)?.mechanic;
+                      return mechanic ? (
+                        <p className="flex items-center gap-1 text-xs text-orange-500 mt-1 font-medium">
+                          <User className="h-3 w-3" /> {mechanic}
+                        </p>
+                      ) : null;
+                    })()}
                   </div>
                   <span className={cn('flex items-center gap-1.5 text-white text-xs font-semibold px-3 py-1.5 rounded-full', cfg.color)}>
                     {cfg.icon} {cfg.label}
@@ -413,6 +457,35 @@ export default function JobsPage() {
                 onPriceChange={v => setNewSvc(s => ({ ...s, price: v }))}
                 onAdd={addFormService}
               />
+            </div>
+
+            <div className="space-y-1.5">
+              <Label>Assign Labour</Label>
+              {activeStaff && activeStaff.length > 0 ? (
+                <Select
+                  value={form.assignedStaff}
+                  onValueChange={v => setForm(f => ({ ...f, assignedStaff: v ?? '' }))}
+                >
+                  <SelectTrigger>
+                    <SelectValue placeholder="Select staff member..." />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {activeStaff.map(s => (
+                      <SelectItem key={s.id} value={s.name}>
+                        <span className="flex items-center gap-2">
+                          {s.name}
+                          <span className="text-xs text-slate-400">— {s.role}</span>
+                        </span>
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              ) : (
+                <p className="text-xs text-slate-400 py-1.5">
+                  No active staff. Add them in the{' '}
+                  <a href="/staff" className="text-orange-500 underline">Staff</a> page.
+                </p>
+              )}
             </div>
 
             <div className="space-y-1.5">

@@ -74,7 +74,16 @@ export interface ServiceCatalog {
   id: string;
   name: string;
   default_price: number;
-  category: string; // e.g. "Engine", "Brakes", "Tires"
+  category: string;
+  created_at: number;
+}
+
+export interface StaffMember {
+  id: string;
+  name: string;
+  phone: string;
+  role: string; // e.g. "Mechanic", "Helper", "Electrician"
+  active: boolean;
   created_at: number;
 }
 
@@ -86,6 +95,7 @@ const db = new Dexie('MistryAppDB') as Dexie & {
   vendors: EntityTable<Vendor, 'id'>;
   workflow_tasks: EntityTable<WorkflowTask, 'id'>;
   service_catalog: EntityTable<ServiceCatalog, 'id'>;
+  staff: EntityTable<StaffMember, 'id'>;
 };
 
 // Schema declaration:
@@ -127,6 +137,16 @@ db.version(5).stores({
 // Phase 6: Service catalog
 db.version(6).stores({
   service_catalog: 'id, category, name'
+});
+
+// Phase 7: Add created_at index to workflow_tasks
+db.version(7).stores({
+  workflow_tasks: 'id, job_id, status, mechanic, created_at'
+});
+
+// Phase 8: Staff management
+db.version(8).stores({
+  staff: 'id, name, role, active'
 });
 
 export { db };
