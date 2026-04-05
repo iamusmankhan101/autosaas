@@ -70,7 +70,10 @@ export default function POSPage() {
     db.staff.where('location_id').equals(currentLocationId || '').and(s => s.active).toArray(),
     [currentLocationId]
   );
-  const vehicles = useLiveQuery(() => db.vehicles.toArray());
+  const vehicles = useLiveQuery(() => 
+    db.vehicles.where('location_id').equals(currentLocationId || '').toArray(),
+    [currentLocationId]
+  );
   const allInvoices = useLiveQuery(() => 
     db.invoices.where('location_id').equals(currentLocationId || '').toArray(),
     [currentLocationId]
@@ -200,6 +203,7 @@ export default function POSPage() {
     await db.vehicles.add({
       id,
       customer_id: selectedCustomerId,
+      location_id: currentLocationId || '',
       make: newVehicle.make.trim(),
       model: newVehicle.model.trim(),
       license_plate: newVehicle.plate.trim(),

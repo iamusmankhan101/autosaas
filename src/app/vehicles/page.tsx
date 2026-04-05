@@ -1,7 +1,7 @@
 'use client';
 
 import { useLiveQuery } from 'dexie-react-hooks';
-import { db, Vehicle, Customer } from '@/lib/db';
+import { db, Vehicle, Customer, JobCard } from '@/lib/db';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -13,6 +13,7 @@ import {
 } from 'lucide-react';
 import { useState } from 'react';
 import { cn } from '@/lib/utils';
+import { useLocation } from '@/components/LocationProvider';
 
 const emptyForm = {
   customer_id: '', make: '', model: '', year: '',
@@ -20,6 +21,7 @@ const emptyForm = {
 };
 
 export default function VehiclesPage() {
+  const { currentLocationId } = useLocation();
   const [search, setSearch]       = useState('');
   const [open, setOpen]           = useState(false);
   const [editing, setEditing]     = useState<Vehicle | null>(null);
@@ -27,10 +29,21 @@ export default function VehiclesPage() {
   const [expandedId, setExpandedId] = useState<string | null>(null);
 
   const vehicles = useLiveQuery(() =>
-    db.vehicles.toArray().then(v => v.sort((a, b) => b.created_at - a.created_at))
+    db.vehicles
+      .where('location_id')
+      .equals(currentLocationId || '')
+      .toArray()
+      .then(v => v.sort((a, b) => b.created_at - a.created_at)),
+    [currentLocationId]
   );
-  const customers = useLiveQuery(() => db.customers.toArray());
-  const jobs      = useLiveQuery(() => db.jobs.toArray());
+  const customers = useLiveQuery(() => 
+    db.customers.where('location_id').equals(currentLocationId || '').toArray(),
+    [currentLocationId]
+  );
+  const jobs = useLiveQuery(() => 
+    db.jobs.where('location_id').equals(currentLocationId || '').toArray(),
+    [currentLocationId]
+  );
 
   const filtered = (vehicles ?? []).filter(v => {
     const q = search.toLowerCase();
@@ -84,7 +97,12 @@ export default function VehiclesPage() {
     if (editing) {
       await db.vehicles.update(editing.id, payload);
     } else {
-      await db.vehicles.add({ id: crypto.randomUUID(), created_at: Date.now(), ...payload });
+      await db.vehicles.add({ 
+        id: crypto.randomUUID(), 
+        created_at: Date.now(), 
+        location_id: currentLocationId || '',
+        ...payload 
+      });
     }
     setOpen(false);
   };

@@ -107,6 +107,7 @@ export interface Vehicle {
   color?: string;
   vin?: string;
   notes?: string;
+  location_id?: string; // Branch association
   created_at: number;
   updated_at: number;
 }
@@ -253,6 +254,28 @@ db.version(16).stores({
   invoices: 'id, job_id, customer_id, location_id, status, created_at',
   vehicles: 'id, customer_id, license_plate',
   users: 'id, email'
+});
+
+// Phase 17: Multi-Location Vehicle Filtering
+db.version(17).stores({
+  settings: 'key',
+  locations: 'id, name',
+  customers: 'id, name, phone, location_id',
+  jobs: 'id, customer_id, location_id, license_plate, status, created_at',
+  transactions: 'id, customer_id, location_id, type, created_at',
+  inventory: 'id, location_id, category, vendor_id, price',
+  vendors: 'id, location_id, name',
+  workflow_tasks: 'id, job_id, location_id, status, created_at',
+  service_catalog: 'id, location_id, category, name',
+  staff: 'id, location_id, name, role, active',
+  invoices: 'id, job_id, customer_id, location_id, status, created_at',
+  vehicles: 'id, customer_id, license_plate, location_id',
+  users: 'id, email'
+}).upgrade(async tx => {
+  const firstLocation = await tx.table('locations').toCollection().first();
+  if (firstLocation) {
+    await tx.table('vehicles').toCollection().modify({ location_id: firstLocation.id });
+  }
 });
 
 export { db };

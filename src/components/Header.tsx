@@ -11,19 +11,8 @@ import { useSubscription } from './SubscriptionProvider';
 import { useAuth } from './AuthProvider';
 
 export default function Header() {
-  const pathname = usePathname();
   const { canUseMultiLocation } = useSubscription();
   const { user } = useAuth();
-
-  // Pill Navigation Items mimicking the dashboard design
-  const navItems = [
-    {href: '/', label: 'Overview'},
-    {href: '/khata', label: 'Khata'},
-    {href: '/jobs', label: 'Manage'},
-    {href: '/inventory', label: 'Inventory'},
-    {href: '/schedule', label: 'Account'},
-    {href: '/reports', label: 'Reports'},
-  ];
 
   return (
     <header className="h-[88px] flex items-center justify-between px-6 pt-4 pb-2 sticky top-0 z-20 w-full bg-[#fcfcfd]/80 dark:bg-[#0f172a]/80 backdrop-blur-sm">
@@ -36,9 +25,9 @@ export default function Header() {
           </Button>
           <div className="hidden md:flex items-center gap-2">
              <div className="w-8 h-8 rounded-md bg-orange-600 flex items-center justify-center">
-               <span className="text-white font-bold text-lg leading-none">M</span>
+               <span className="text-white font-bold text-lg leading-none">A</span>
              </div>
-             <span className="text-xl font-bold tracking-tight text-slate-900 dark:text-white">MistryApp</span>
+             <span className="text-xl font-bold tracking-tight text-slate-900 dark:text-white">Auto Pulse</span>
           </div>
         </div>
 
@@ -56,27 +45,7 @@ export default function Header() {
         </div>
       </div>
       
-      {/* Middle: Pill Navigation */}
-      <nav className="hidden lg:flex items-center bg-white dark:bg-slate-800 rounded-full px-2 py-2 shadow-sm border border-slate-100 dark:border-slate-700">
-        {navItems.map((item) => {
-           // Basic matching since we map these loosely
-           const isActive = pathname === item.href || (item.href !== '/' && pathname.startsWith(item.href));
-           return (
-              <Link 
-                key={item.href} 
-                href={item.href}
-                className={cn(
-                  "px-5 py-2 rounded-full text-sm font-medium transition-colors",
-                  isActive 
-                    ? "bg-slate-900 text-white dark:bg-slate-100 dark:text-slate-900 shadow-sm" 
-                    : "text-slate-500 hover:text-slate-900 dark:hover:text-white hover:bg-slate-50 dark:hover:bg-slate-700"
-                )}
-              >
-                {item.label}
-              </Link>
-           );
-        })}
-      </nav>
+      {/* Navigation removed as requested */}
 
       {/* Right: Actions & Profile */}
       <div className="flex items-center gap-5">

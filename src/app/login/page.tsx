@@ -45,9 +45,9 @@ export default function LoginPage() {
           {/* Header */}
           <div className="text-center space-y-3">
              <div className="w-16 h-16 bg-orange-600 rounded-[1.5rem] flex items-center justify-center mx-auto shadow-lg shadow-orange-600/20 mb-6 group transition-transform hover:scale-110">
-                <span className="text-white font-black text-3xl leading-none">M</span>
+                <span className="text-white font-black text-3xl leading-none">A</span>
              </div>
-             <h1 className="text-3xl font-black tracking-tight text-slate-900">MistryApp <span className="text-orange-600">POS</span></h1>
+             <h1 className="text-3xl font-black tracking-tight text-slate-900">Auto Pulse <span className="text-orange-600">POS</span></h1>
              <p className="text-slate-500 font-medium leading-relaxed">Welcome back! Sign in to manage your workshop and increase your profitability.</p>
           </div>
 
@@ -108,7 +108,7 @@ export default function LoginPage() {
 
           {/* Footer */}
           <div className="text-center space-y-4 pt-4 border-t border-slate-100">
-             <p className="text-sm text-slate-500 font-medium">New to MistryApp?</p>
+             <p className="text-sm text-slate-500 font-medium">New to Auto Pulse?</p>
              <Link 
                 href="/register" 
                 className="inline-flex items-center gap-2 text-sm font-black text-orange-600 hover:text-orange-700 transition-colors"

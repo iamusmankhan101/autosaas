@@ -58,7 +58,7 @@ export default function LocationSwitcher() {
         
         <DropdownMenuSeparator className="my-2 bg-slate-100 dark:bg-slate-800" />
         
-        <Link href="/profile">
+        <Link href="/branches">
           <DropdownMenuItem className="flex items-center gap-2 px-3 py-2.5 rounded-xl cursor-pointer hover:bg-orange-50 dark:hover:bg-orange-900/20 text-orange-600 dark:text-orange-500 transition-colors">
             <Settings className="h-4 w-4" />
             <span className="font-medium">Manage Branches</span>

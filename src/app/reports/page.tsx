@@ -103,7 +103,7 @@ export default function ReportsPage() {
 
       {/* Print Header (Visible only when printing) */}
       <div className="hidden print:block text-center space-y-2 mb-10">
-          <h1 className="text-4xl font-bold">MistryApp - Workshop Report</h1>
+          <h1 className="text-4xl font-bold">Auto Pulse - Workshop Report</h1>
           <p className="text-slate-500">Report Range: {range === '1D' ? 'Last 24 Hours' : range === '7D' ? 'Last 7 Days' : 'Last 30 Days'}</p>
           <p className="text-sm font-mono text-slate-400">Date Generated: {new Date().toLocaleString()}</p>
           <hr className="mt-6 border-slate-200" />

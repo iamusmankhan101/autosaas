@@ -157,12 +157,18 @@ export default function JobsPage() {
       updated_at: Date.now(),
     });
 
-    // Auto-create vehicle record if plate doesn't exist yet
-    const existingVehicle = await db.vehicles.filter(v => v.license_plate === plate).first();
+    // Auto-create vehicle record if plate doesn't exist yet for this location
+    const existingVehicle = await db.vehicles
+      .where('license_plate')
+      .equals(plate)
+      .and(v => v.location_id === currentLocationId)
+      .first();
+
     if (!existingVehicle) {
       await db.vehicles.add({
         id: crypto.randomUUID(),
         customer_id: form.customer_id,
+        location_id: currentLocationId,
         make: form.vehicle_make.trim(),
         model: form.vehicle_model.trim(),
         license_plate: plate,
@@ -233,7 +239,11 @@ export default function JobsPage() {
       });
       // Link customer to job and vehicle
       await db.jobs.update(job.id, { customer_id: customerId, updated_at: Date.now() });
-      const vehicle = await db.vehicles.filter(v => v.license_plate === job.license_plate).first();
+      const vehicle = await db.vehicles
+        .where('license_plate')
+        .equals(job.license_plate)
+        .and(v => v.location_id === currentLocationId)
+        .first();
       if (vehicle && !vehicle.customer_id) {
         await db.vehicles.update(vehicle.id, { customer_id: customerId, updated_at: Date.now() });
       }

@@ -15,8 +15,8 @@ export default function InvoiceDetailPage({ params }: { params: Promise<{ id: st
   const invoice = useLiveQuery(() => db.invoices.get(id), [id]);
   const settings = useLiveQuery(() => db.settings.toArray());
   const logo = settings?.find(s => s.key === 'workshop_logo')?.value;
-  const invoiceHeading = settings?.find(s => s.key === 'invoice_heading')?.value || "Lahore's Digital Workshop";
-  const invoiceFooter = settings?.find(s => s.key === 'invoice_footer')?.value || "MistryApp · Lahore's Digital Workshop Companion";
+  const invoiceHeading = settings?.find(s => s.key === 'invoice_heading')?.value || "Auto Pulse Workshop";
+  const invoiceFooter = settings?.find(s => s.key === 'invoice_footer')?.value || "Auto Pulse · Your Digital Workshop Companion";
 
   const markPaid = async () => {
     if (!invoice) return;
@@ -76,7 +76,7 @@ export default function InvoiceDetailPage({ params }: { params: Promise<{ id: st
                 <img src={logo} alt="Workshop Logo" className="w-full h-full object-contain object-left" />
               </div>
             ) : (
-              <h1 className="text-2xl font-bold text-slate-900 dark:text-white">MistryApp</h1>
+              <h1 className="text-2xl font-bold text-slate-900 dark:text-white">Auto Pulse</h1>
             )}
             <p className="text-sm text-slate-400 mt-0.5">{invoiceHeading}</p>
           </div>
