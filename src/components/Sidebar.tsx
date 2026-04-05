@@ -3,7 +3,7 @@
 import React from 'react';
 import {useTranslations} from 'next-intl';
 import {Link, usePathname} from '@/i18n/routing';
-import {LayoutDashboard, BookUser, Wrench, Package, CalendarDays, Settings, Sun, Moon, HelpCircle, LogOut} from 'lucide-react';
+import {LayoutDashboard, BookUser, Wrench, Package, CalendarDays, KanbanSquare, ConciergeBell, Settings, Sun, Moon, HelpCircle, LogOut} from 'lucide-react';
 import {cn} from '@/lib/utils';
 
 export default function Sidebar() {
@@ -13,8 +13,10 @@ export default function Sidebar() {
     {href: '/', icon: LayoutDashboard},
     {href: '/khata', icon: BookUser},
     {href: '/jobs', icon: Wrench},
+    {href: '/services', icon: ConciergeBell},
     {href: '/inventory', icon: Package},
     {href: '/schedule', icon: CalendarDays},
+    {href: '/workflow', icon: KanbanSquare},
   ];
 
   return (

@@ -9,6 +9,12 @@ export interface Customer {
   updated_at: number;
 }
 
+export interface JobService {
+  id: string;
+  name: string;
+  price: number;
+}
+
 export interface JobCard {
   id: string; // UUID
   customer_id: string;
@@ -16,6 +22,7 @@ export interface JobCard {
   vehicle_model: string;  // Alto, Civic
   license_plate: string;
   status: 'PENDING' | 'IN_PROGRESS' | 'READY' | 'DELIVERED';
+  services?: JobService[];
   total_amount: number;
   advance_paid: number;
   thumbnails?: string[]; // Base64 compressed strings
@@ -52,12 +59,33 @@ export interface Vendor {
   udhaar_owed: number; // Udhaar we owe to them
 }
 
+export interface WorkflowTask {
+  id: string;
+  job_id: string;
+  title: string;
+  mechanic: string;
+  priority: 'LOW' | 'MEDIUM' | 'HIGH';
+  status: 'TODO' | 'IN_PROGRESS' | 'DONE';
+  created_at: number;
+  updated_at: number;
+}
+
+export interface ServiceCatalog {
+  id: string;
+  name: string;
+  default_price: number;
+  category: string; // e.g. "Engine", "Brakes", "Tires"
+  created_at: number;
+}
+
 const db = new Dexie('MistryAppDB') as Dexie & {
   customers: EntityTable<Customer, 'id'>;
   jobs: EntityTable<JobCard, 'id'>;
   transactions: EntityTable<KhataTransaction, 'id'>;
   inventory: EntityTable<InventoryItem, 'id'>;
   vendors: EntityTable<Vendor, 'id'>;
+  workflow_tasks: EntityTable<WorkflowTask, 'id'>;
+  service_catalog: EntityTable<ServiceCatalog, 'id'>;
 };
 
 // Schema declaration:
@@ -74,6 +102,31 @@ db.version(2).stores({
   transactions: 'id, customer_id, type',
   inventory: 'id, category, vendor_id',
   vendors: 'id, name'
+});
+
+// Phase 3: Workflow Tasks
+db.version(3).stores({
+  customers: 'id, name, phone',
+  jobs: 'id, customer_id, license_plate, status, bay_assignment',
+  transactions: 'id, customer_id, type',
+  inventory: 'id, category, vendor_id',
+  vendors: 'id, name',
+  workflow_tasks: 'id, job_id, status, mechanic'
+});
+
+// Phase 4: Add created_at index to transactions for orderBy queries
+db.version(4).stores({
+  transactions: 'id, customer_id, type, created_at'
+});
+
+// Phase 5: Add created_at index to jobs for orderBy queries
+db.version(5).stores({
+  jobs: 'id, customer_id, license_plate, status, bay_assignment, created_at'
+});
+
+// Phase 6: Service catalog
+db.version(6).stores({
+  service_catalog: 'id, category, name'
 });
 
 export { db };

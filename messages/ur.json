@@ -3,15 +3,15 @@
     "title": "مستری ایپ",
     "subtitle": "لاہور کا ڈیجیٹل ورکشاپ ساتھی",
     "dashboard": "ڈیش بورڈ",
-    "khata": "ڈیجیٹل کھاتہ",
+    "khata": "لیجر",
     "jobs": "جوب کارڈ",
     "inventory": "اسٹاک",
     "settings": "ترتیبات",
     "language": "English"
   },
   "Khata": {
-    "title": "ڈیجیٹل کھاتہ",
-    "total_udhaar": "کل ادھار",
+    "title": "لیجر",
+    "total_udhaar": "کل واجب الادا",
     "add_customer": "گاہک شامل کریں",
     "remind_whatsapp": "واٹس ایپ ریمائنڈر"
   }
