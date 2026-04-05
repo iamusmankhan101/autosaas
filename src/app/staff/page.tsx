@@ -9,26 +9,29 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/u
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import {
   PlusCircle, Users, Wrench, CheckCircle2, Clock,
-  Pencil, ToggleLeft, ToggleRight, Phone, Briefcase,
+  Pencil, ToggleLeft, ToggleRight, Phone, Briefcase, Trash2,
 } from 'lucide-react';
 import { useState } from 'react';
 import { cn } from '@/lib/utils';
+import { useLocation } from '@/components/LocationProvider';
 
 const ROLES = ['Mechanic', 'Helper', 'Electrician', 'Painter', 'Detailer', 'Manager'];
 
 const emptyForm = { name: '', phone: '', role: 'Mechanic', active: true };
 
 export default function StaffPage() {
+  const { currentLocationId } = useLocation();
   const [open, setOpen]       = useState(false);
   const [editing, setEditing] = useState<StaffMember | null>(null);
   const [form, setForm]       = useState(emptyForm);
 
   const staff = useLiveQuery(() =>
-    db.staff.toArray().then(s => s.sort((a, b) => Number(b.active) - Number(a.active) || a.name.localeCompare(b.name)))
+    db.staff.where('location_id').equals(currentLocationId || '').toArray().then(s => s.sort((a, b) => Number(b.active) - Number(a.active) || a.name.localeCompare(b.name))),
+    [currentLocationId]
   );
 
-  const tasks = useLiveQuery(() => db.workflow_tasks.toArray());
-  const jobs  = useLiveQuery(() => db.jobs.toArray());
+  const tasks = useLiveQuery(() => db.workflow_tasks.where('location_id').equals(currentLocationId || '').toArray(), [currentLocationId]);
+  const jobs  = useLiveQuery(() => db.jobs.where('location_id').equals(currentLocationId || '').toArray(), [currentLocationId]);
 
   const activeStaff   = (staff ?? []).filter(s => s.active).length;
   const inactiveStaff = (staff ?? []).filter(s => !s.active).length;
@@ -52,12 +55,12 @@ export default function StaffPage() {
   };
 
   const handleSave = async () => {
-    if (!form.name.trim()) return;
-    const payload = { name: form.name.trim(), phone: form.phone.trim(), role: form.role, active: form.active };
+    if (!form.name.trim() || !currentLocationId) return;
+    const payloadExtra = { name: form.name.trim(), phone: form.phone.trim(), role: form.role, active: form.active };
     if (editing) {
-      await db.staff.update(editing.id, payload);
+      await db.staff.update(editing.id, payloadExtra);
     } else {
-      await db.staff.add({ id: crypto.randomUUID(), created_at: Date.now(), ...payload });
+      await db.staff.add({ id: crypto.randomUUID(), location_id: currentLocationId, created_at: Date.now(), ...payloadExtra });
     }
     setOpen(false);
   };
@@ -195,12 +198,19 @@ export default function StaffPage() {
                 </div>
 
                 {/* Actions */}
-                <div className="px-5 py-4">
+                <div className="flex items-center gap-2 px-5 py-4">
                   <button
                     onClick={() => openEdit(member)}
-                    className="w-full flex items-center justify-center gap-2 text-xs font-medium border border-slate-200 dark:border-slate-600 py-2 rounded-full hover:bg-slate-50 dark:hover:bg-slate-700 transition-colors text-slate-700 dark:text-slate-200"
+                    className="flex-1 flex items-center justify-center gap-2 text-xs font-medium border border-slate-200 dark:border-slate-600 py-2 rounded-full hover:bg-slate-50 dark:hover:bg-slate-700 transition-colors text-slate-700 dark:text-slate-200"
                   >
                     <Pencil className="h-3.5 w-3.5" /> Edit
+                  </button>
+                  <button
+                    onClick={() => { if (confirm(`Delete "${member.name}"?`)) db.staff.delete(member.id); }}
+                    className="p-2 rounded-full border border-red-100 dark:border-red-900 hover:bg-red-50 dark:hover:bg-red-900/20 transition-colors"
+                    title="Delete staff member"
+                  >
+                    <Trash2 className="h-4 w-4 text-red-400" />
                   </button>
                 </div>
               </div>
@@ -234,7 +244,7 @@ export default function StaffPage() {
             </div>
             <div className="space-y-1.5">
               <Label>Role</Label>
-              <Select value={form.role} onValueChange={v => setForm(f => ({ ...f, role: v }))}>
+              <Select value={form.role} onValueChange={v => setForm(f => ({ ...f, role: v ?? 'Mechanic' }))}>
                 <SelectTrigger><SelectValue /></SelectTrigger>
                 <SelectContent>
                   {ROLES.map(r => <SelectItem key={r} value={r}>{r}</SelectItem>)}

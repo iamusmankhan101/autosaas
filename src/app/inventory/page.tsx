@@ -8,9 +8,10 @@ import { Label } from '@/components/ui/label';
 import { Badge } from '@/components/ui/badge';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { PlusCircle, AlertTriangle, Package2, Boxes, Pencil, TrendingDown } from 'lucide-react';
+import { PlusCircle, AlertTriangle, Package2, Boxes, Pencil, TrendingDown, Trash2, BarChart3 } from 'lucide-react';
 import { useState } from 'react';
 import { cn } from '@/lib/utils';
+import { useLocation } from '@/components/LocationProvider';
 
 type Category = InventoryItem['category'];
 type Unit = InventoryItem['unit'];
@@ -37,23 +38,28 @@ const CAT_COLORS: Record<Category, string> = {
 const emptyForm = {
   name: '', category: 'PART' as Category, quantity: '',
   unit: 'PIECE' as Unit, alert_threshold: '5',
+  price: '', // Added in v13
 };
 
 export default function InventoryPage() {
+  const { currentLocationId } = useLocation();
   const [activeTab, setActiveTab]   = useState('ALL');
   const [open, setOpen]             = useState(false);
   const [editing, setEditing]       = useState<InventoryItem | null>(null);
   const [form, setForm]             = useState(emptyForm);
 
   const inventory = useLiveQuery(
-    () => activeTab === 'ALL'
-      ? db.inventory.toArray()
-      : db.inventory.filter(i => i.category === activeTab).toArray(),
-    [activeTab]
+    () => {
+      const q = db.inventory.where('location_id').equals(currentLocationId || '');
+      return activeTab === 'ALL'
+        ? q.toArray()
+        : q.and(i => i.category === activeTab).toArray();
+    },
+    [activeTab, currentLocationId]
   );
 
-  const allInventory = useLiveQuery(() => db.inventory.toArray());
-  const vendors      = useLiveQuery(() => db.vendors.toArray());
+  const allInventory = useLiveQuery(() => db.inventory.where('location_id').equals(currentLocationId || '').toArray(), [currentLocationId]);
+  const vendors      = useLiveQuery(() => db.vendors.where('location_id').equals(currentLocationId || '').toArray(), [currentLocationId]);
 
   const totalOwed  = vendors?.reduce((s, v) => s + v.udhaar_owed, 0) ?? 0;
   const lowStock   = (allInventory ?? []).filter(i => i.quantity <= i.alert_threshold).length;
@@ -66,26 +72,29 @@ export default function InventoryPage() {
       name: item.name, category: item.category,
       quantity: String(item.quantity), unit: item.unit,
       alert_threshold: String(item.alert_threshold),
+      price: String(item.price || ''),
     });
     setOpen(true);
   };
 
   const handleSave = async () => {
-    if (!form.name.trim()) return;
-    const payload = {
+    if (!form.name.trim() || !currentLocationId) return;
+    const payloadExtra = {
       name: form.name.trim(),
       category: form.category,
       quantity: parseFloat(form.quantity) || 0,
       unit: form.unit,
       alert_threshold: parseFloat(form.alert_threshold) || 0,
+      price: parseFloat(form.price) || 0,
     };
     if (editing) {
-      await db.inventory.update(editing.id, payload);
+      await db.inventory.update(editing.id, payloadExtra);
     } else {
       await db.inventory.add({
         id: crypto.randomUUID(),
+        location_id: currentLocationId,
         created_at: Date.now(),
-        ...payload,
+        ...payloadExtra,
       });
     }
     setOpen(false);
@@ -107,9 +116,18 @@ export default function InventoryPage() {
           <h1 className="text-3xl font-bold tracking-tight text-slate-900 dark:text-white">Inventory & Stock</h1>
           <p className="text-slate-500 text-sm mt-1">Manage workshop parts, tires, and oil liters.</p>
         </div>
-        <Button onClick={openCreate} className="rounded-full px-5">
-          <PlusCircle className="mr-2 h-4 w-4" /> Add Item
-        </Button>
+        <div className="flex items-center gap-3">
+          <Button 
+            variant="outline"
+            className="rounded-full px-5 border-2 border-dashed border-slate-200"
+            onClick={() => window.location.href = '/reports'}
+          >
+            <BarChart3 className="mr-2 h-4 w-4 text-orange-500" /> Stock Report
+          </Button>
+          <Button onClick={openCreate} className="rounded-full px-5">
+            <PlusCircle className="mr-2 h-4 w-4" /> Add Item
+          </Button>
+        </div>
       </div>
 
       {/* Summary Cards */}
@@ -169,9 +187,10 @@ export default function InventoryPage() {
         </div>
 
         {/* Table header */}
-        <div className="grid grid-cols-[1fr_120px_120px_80px] gap-4 px-6 py-3 bg-slate-50 dark:bg-slate-800/60 text-xs font-medium text-slate-400 uppercase tracking-wide">
+        <div className="grid grid-cols-[1fr_100px_100px_100px_80px] gap-4 px-6 py-3 bg-slate-50 dark:bg-slate-800/60 text-xs font-medium text-slate-400 uppercase tracking-wide">
           <span>Item Name</span>
           <span>Category</span>
+          <span className="text-right">Price</span>
           <span className="text-right">Quantity</span>
           <span />
         </div>
@@ -189,7 +208,7 @@ export default function InventoryPage() {
               <div
                 key={item.id}
                 className={cn(
-                  'grid grid-cols-[1fr_120px_120px_80px] gap-4 px-6 py-4 items-center border-b border-slate-100 dark:border-slate-700 last:border-0',
+                  'grid grid-cols-[1fr_100px_100px_100px_80px] gap-4 px-6 py-4 items-center border-b border-slate-100 dark:border-slate-700 last:border-0',
                   isLow && 'bg-amber-50/50 dark:bg-amber-900/10'
                 )}
               >
@@ -202,6 +221,9 @@ export default function InventoryPage() {
                     {CATEGORIES.find(c => c.value === item.category)?.label}
                   </span>
                 </div>
+                <div className="text-right font-semibold text-slate-700 dark:text-slate-300">
+                  PKR {(item.price || 0).toLocaleString()}
+                </div>
                 <div className="text-right">
                   <span className={cn('font-bold text-sm', isLow ? 'text-amber-600' : 'text-slate-900 dark:text-white')}>
                     {item.quantity}
@@ -211,12 +233,18 @@ export default function InventoryPage() {
                     <p className="text-[10px] text-amber-500 mt-0.5">min {item.alert_threshold}</p>
                   )}
                 </div>
-                <div className="flex justify-end">
+                <div className="flex justify-end gap-1">
                   <button
                     onClick={() => openEdit(item)}
                     className="p-2 rounded-full hover:bg-slate-100 dark:hover:bg-slate-700 transition-colors"
                   >
                     <Pencil className="h-3.5 w-3.5 text-slate-400" />
+                  </button>
+                  <button
+                    onClick={() => { if (confirm(`Delete "${item.name}"?`)) db.inventory.delete(item.id); }}
+                    className="p-2 rounded-full hover:bg-red-50 dark:hover:bg-red-900/20 transition-colors"
+                  >
+                    <Trash2 className="h-3.5 w-3.5 text-red-400" />
                   </button>
                 </div>
               </div>
@@ -266,7 +294,15 @@ export default function InventoryPage() {
                 </Select>
               </div>
             </div>
-            <div className="grid grid-cols-2 gap-3">
+            <div className="grid grid-cols-3 gap-3">
+              <div className="space-y-1.5">
+                <Label>Price (PKR)</Label>
+                <Input
+                  type="number" placeholder="0"
+                  value={form.price}
+                  onChange={e => setForm(f => ({ ...f, price: e.target.value }))}
+                />
+              </div>
               <div className="space-y-1.5">
                 <Label>Quantity</Label>
                 <Input
@@ -276,7 +312,7 @@ export default function InventoryPage() {
                 />
               </div>
               <div className="space-y-1.5">
-                <Label>Low Stock Alert</Label>
+                <Label>Alert At</Label>
                 <Input
                   type="number" placeholder="5"
                   value={form.alert_threshold}

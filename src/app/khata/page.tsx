@@ -9,14 +9,16 @@ import { Badge } from '@/components/ui/badge';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import {
   PlusCircle, Search, MessageCircle, ChevronDown, ChevronUp,
-  ArrowUpRight, ArrowDownLeft, BookOpen, Users, AlertCircle,
+  ArrowUpRight, ArrowDownLeft, BookOpen, Users, AlertCircle, Trash2,
 } from 'lucide-react';
 import { useState } from 'react';
 import { cn } from '@/lib/utils';
+import { useLocation } from '@/components/LocationProvider';
 
 type TxType = 'CREDIT' | 'PAYMENT';
 
 export default function LedgerPage() {
+  const { currentLocationId } = useLocation();
   const [searchTerm, setSearchTerm]   = useState('');
   const [expandedId, setExpandedId]   = useState<string | null>(null);
   const [addCustomer, setAddCustomer] = useState(false);
@@ -26,15 +28,16 @@ export default function LedgerPage() {
 
   const customers = useLiveQuery(
     () => db.customers
+      .where('location_id').equals(currentLocationId || '')
       .filter(c =>
         c.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
         c.phone.includes(searchTerm)
       )
       .toArray(),
-    [searchTerm]
+    [searchTerm, currentLocationId]
   );
 
-  const transactions = useLiveQuery(() => db.transactions.toArray());
+  const transactions = useLiveQuery(() => db.transactions.where('location_id').equals(currentLocationId || '').toArray(), [currentLocationId]);
 
   const totalUdhaar    = customers?.reduce((s, c) => s + c.total_udhaar, 0) ?? 0;
   const totalCustomers = customers?.length ?? 0;
@@ -46,12 +49,13 @@ export default function LedgerPage() {
       .sort((a, b) => b.created_at - a.created_at);
 
   const handleAddCustomer = async () => {
-    if (!custForm.name.trim()) return;
+    if (!custForm.name.trim() || !currentLocationId) return;
     await db.customers.add({
       id: crypto.randomUUID(),
       name: custForm.name.trim(),
       phone: custForm.phone.trim(),
       total_udhaar: 0,
+      location_id: currentLocationId,
       created_at: Date.now(),
       updated_at: Date.now(),
     });
@@ -60,7 +64,7 @@ export default function LedgerPage() {
   };
 
   const handleTransaction = async () => {
-    if (!txDialog || !txForm.amount) return;
+    if (!txDialog || !txForm.amount || !currentLocationId) return;
     const amount = parseFloat(txForm.amount);
     if (isNaN(amount) || amount <= 0) return;
 
@@ -73,6 +77,7 @@ export default function LedgerPage() {
     await db.transactions.add({
       id: crypto.randomUUID(),
       customer_id: fresh.id,
+      location_id: currentLocationId,
       amount,
       type,
       description: txForm.description.trim() || (type === 'CREDIT' ? 'Udhaar added' : 'Payment received'),
@@ -92,6 +97,12 @@ export default function LedgerPage() {
     setTxDialog(null);
     // Keep row expanded so user sees the new transaction
     setExpandedId(customer.id);
+  };
+
+  const handleDeleteCustomer = async (id: string, name: string) => {
+    if (!confirm(`Delete "${name}"? This will also remove their transactions.`)) return;
+    await db.transactions.filter(t => t.customer_id === id).delete();
+    await db.customers.delete(id);
   };
 
   const handleWhatsApp = (phone: string, amount: number) => {
@@ -226,6 +237,14 @@ export default function LedgerPage() {
                         <MessageCircle className="h-4 w-4 text-green-600" />
                       </Button>
                     )}
+                    <Button
+                      variant="ghost" size="icon"
+                      className="h-8 w-8 rounded-full hover:bg-red-50 dark:hover:bg-red-900/20"
+                      onClick={() => handleDeleteCustomer(customer.id, customer.name)}
+                      title="Delete customer"
+                    >
+                      <Trash2 className="h-4 w-4 text-red-400" />
+                    </Button>
                   </div>
                 </div>
 

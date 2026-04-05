@@ -9,17 +9,22 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/u
 import { PlusCircle, Pencil, Trash2, ConciergeBell, Tag } from 'lucide-react';
 import { useState } from 'react';
 import { cn } from '@/lib/utils';
+import { useLocation } from '@/components/LocationProvider';
 
 const emptyForm = { name: '', default_price: '', category: '' };
 
 export default function ServicesPage() {
+  const { currentLocationId } = useLocation();
   const [open, setOpen]       = useState(false);
   const [editing, setEditing] = useState<ServiceCatalog | null>(null);
   const [form, setForm]       = useState(emptyForm);
 
-  const services = useLiveQuery(() => db.service_catalog.toArray().then(s =>
-    s.sort((a, b) => a.category.localeCompare(b.category) || a.name.localeCompare(b.name))
-  ));
+  const services = useLiveQuery(() => 
+    db.service_catalog.where('location_id').equals(currentLocationId || '').toArray().then(s =>
+      s.sort((a, b) => a.category.localeCompare(b.category) || a.name.localeCompare(b.name))
+    ),
+    [currentLocationId]
+  );
 
   // group by category
   const grouped = (services ?? []).reduce<Record<string, ServiceCatalog[]>>((acc, s) => {
@@ -37,21 +42,27 @@ export default function ServicesPage() {
   };
 
   const handleSave = async () => {
-    if (!form.name.trim()) return;
-    const payload = {
+    if (!form.name.trim() || !currentLocationId) return;
+    const payloadExtra = {
       name: form.name.trim(),
       default_price: parseFloat(form.default_price) || 0,
       category: form.category.trim() || 'General',
     };
     if (editing) {
-      await db.service_catalog.update(editing.id, payload);
+      await db.service_catalog.update(editing.id, payloadExtra);
     } else {
-      await db.service_catalog.add({ id: crypto.randomUUID(), created_at: Date.now(), ...payload });
+      await db.service_catalog.add({
+        id: crypto.randomUUID(),
+        location_id: currentLocationId,
+        created_at: Date.now(),
+        ...payloadExtra
+      });
     }
     setOpen(false);
   };
 
-  const handleDelete = async (id: string) => {
+  const handleDelete = async (id: string, name: string) => {
+    if (!confirm(`Delete service "${name}"?`)) return;
     await db.service_catalog.delete(id);
   };
 
@@ -130,7 +141,7 @@ export default function ServicesPage() {
                         <Pencil className="h-3.5 w-3.5 text-slate-400" />
                       </button>
                       <button
-                        onClick={() => handleDelete(svc.id)}
+                        onClick={() => handleDelete(svc.id, svc.name)}
                         className="p-1.5 rounded-full hover:bg-red-50 dark:hover:bg-red-900/20 transition-colors"
                       >
                         <Trash2 className="h-3.5 w-3.5 text-red-400" />

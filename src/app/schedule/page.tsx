@@ -9,6 +9,9 @@ import { Label } from '@/components/ui/label';
 import { CalendarDays, Clock, ChevronLeft, ChevronRight, Wrench, Car, X } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { useState } from 'react';
+import { useSubscription } from '@/components/SubscriptionProvider';
+import Link from 'next/link';
+import { Lock } from 'lucide-react';
 
 const BAYS = ['Bay 1 (Lift)', 'Bay 2 (General)', 'Detailing Area'];
 const HOURS = Array.from({ length: 10 }, (_, i) => i + 9); // 9 AM – 6 PM
@@ -42,9 +45,31 @@ function isSameDay(a: Date, b: Date) {
 }
 
 export default function SchedulePage() {
+  const { canUseBayScheduling } = useSubscription();
   const [selectedDate, setSelectedDate] = useState(new Date());
   const [assignDialog, setAssignDialog] = useState<{ bay: string; hour: number } | null>(null);
   const [selectedJobId, setSelectedJobId] = useState('');
+
+  if (!canUseBayScheduling) {
+    return (
+      <div className="h-[80vh] flex flex-col items-center justify-center text-center px-6">
+        <div className="w-20 h-20 rounded-full bg-orange-100 dark:bg-orange-900/30 flex items-center justify-center mb-6">
+          <Lock className="h-10 w-10 text-orange-600" />
+        </div>
+        <h1 className="text-3xl font-bold text-slate-900 dark:text-white mb-2">Scheduling is Locked</h1>
+        <p className="text-slate-500 max-w-md mx-auto mb-8">
+          Bay Scheduling is available on the **Basic** and **Pro** plans. 
+          Manage your workshop flow, lifts, and bays efficiently by upgrading today.
+        </p>
+        <Link 
+          href="/profile?tab=subscription" 
+          className="rounded-full px-8 h-12 flex items-center justify-center bg-orange-600 hover:bg-orange-700 text-white font-semibold transition-colors"
+        >
+          Upgrade Now
+        </Link>
+      </div>
+    );
+  }
 
   const jobs = useLiveQuery(() => db.jobs.filter(j => j.status !== 'DELIVERED').toArray());
 

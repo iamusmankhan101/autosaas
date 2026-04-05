@@ -13,6 +13,10 @@ import {
 } from 'lucide-react';
 import { useState } from 'react';
 import { cn } from '@/lib/utils';
+import { useSubscription } from '@/components/SubscriptionProvider';
+import { useLocation } from '@/components/LocationProvider';
+import Link from 'next/link';
+import { Lock } from 'lucide-react';
 
 type Status   = WorkflowTask['status'];
 type Priority = WorkflowTask['priority'];
@@ -48,10 +52,33 @@ const PRIORITY_CONFIG: Record<Priority, { label: string; cls: string; icon: Reac
 };
 
 export default function WorkflowPage() {
+  const { currentLocationId } = useLocation();
+  const { canUseWorkflow } = useSubscription();
   const [open, setOpen]     = useState(false);
   const [dragId, setDragId] = useState<string | null>(null);
   const [dragOver, setDragOver] = useState<Status | null>(null);
   const [form, setForm]     = useState({ title: '', mechanic: '', priority: 'MEDIUM' as Priority, job_id: '' });
+
+  if (!canUseWorkflow) {
+    return (
+      <div className="h-[80vh] flex flex-col items-center justify-center text-center px-6">
+        <div className="w-20 h-20 rounded-full bg-orange-100 dark:bg-orange-900/30 flex items-center justify-center mb-6">
+          <Lock className="h-10 w-10 text-orange-600" />
+        </div>
+        <h1 className="text-3xl font-bold text-slate-900 dark:text-white mb-2">Workflow is Locked</h1>
+        <p className="text-slate-500 max-w-md mx-auto mb-8">
+          The Workflow Pipeline is available on the **Basic** and **Pro** plans. 
+          Streamline your team's tasks and boost workshop productivity by upgrading today.
+        </p>
+        <Link 
+          href="/profile?tab=subscription" 
+          className="rounded-full px-8 h-12 flex items-center justify-center bg-orange-600 hover:bg-orange-700 text-white font-semibold transition-colors"
+        >
+          Upgrade Now
+        </Link>
+      </div>
+    );
+  }
 
   const tasks = useLiveQuery(() =>
     db.workflow_tasks.toArray().then(t => t.sort((a, b) => a.created_at - b.created_at))
@@ -65,10 +92,11 @@ export default function WorkflowPage() {
   const progress = total > 0 ? Math.round((done / total) * 100) : 0;
 
   const createTask = async () => {
-    if (!form.title.trim()) return;
+    if (!form.title.trim() || !currentLocationId) return;
     await db.workflow_tasks.add({
       id: crypto.randomUUID(),
       job_id: form.job_id,
+      location_id: currentLocationId,
       title: form.title.trim(),
       mechanic: form.mechanic.trim(),
       priority: form.priority,
@@ -307,7 +335,11 @@ export default function WorkflowPage() {
               <Label>Assign To</Label>
               {staff && staff.length > 0 ? (
                 <Select value={form.mechanic} onValueChange={v => setForm(f => ({ ...f, mechanic: v ?? '' }))}>
-                  <SelectTrigger><SelectValue placeholder="Select staff member..." /></SelectTrigger>
+                  <SelectTrigger>
+                    <SelectValue placeholder="Select staff member...">
+                      {form.mechanic || "Select staff member..."}
+                    </SelectValue>
+                  </SelectTrigger>
                   <SelectContent>
                     {staff.map(s => (
                       <SelectItem key={s.id} value={s.name}>
@@ -339,7 +371,14 @@ export default function WorkflowPage() {
               <div className="space-y-1.5">
                 <Label>Link to Job (optional)</Label>
                 <Select value={form.job_id} onValueChange={v => setForm(f => ({ ...f, job_id: v ?? '' }))}>
-                  <SelectTrigger><SelectValue placeholder="Select a job..." /></SelectTrigger>
+                  <SelectTrigger>
+                    <SelectValue placeholder="Select a job...">
+                      {(() => {
+                        const j = jobs?.find(x => x.id === form.job_id);
+                        return j ? `${j.vehicle_make} ${j.vehicle_model} · ${j.license_plate}` : "Select a job...";
+                      })()}
+                    </SelectValue>
+                  </SelectTrigger>
                   <SelectContent>
                     {jobs.map(j => (
                       <SelectItem key={j.id} value={j.id}>

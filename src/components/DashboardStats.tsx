@@ -3,14 +3,17 @@
 import { useLiveQuery } from 'dexie-react-hooks';
 import { db } from '@/lib/db';
 import RevenueChart from './RevenueChart';
+import Link from 'next/link';
 import {
   ArrowUpRight, Wallet, Banknote, CheckCircle2, Activity,
   MoreHorizontal, Car,
 } from 'lucide-react';
+import { useLocation } from './LocationProvider';
 
 export default function DashboardStats() {
-  const jobs = useLiveQuery(() => db.jobs.toArray());
-  const customers = useLiveQuery(() => db.customers.toArray());
+  const { currentLocationId } = useLocation();
+  const jobs = useLiveQuery(() => db.jobs.where('location_id').equals(currentLocationId || '').toArray(), [currentLocationId]);
+  const customers = useLiveQuery(() => db.customers.where('location_id').equals(currentLocationId || '').toArray(), [currentLocationId]);
 
   const completedJobs = jobs?.filter(j => j.status === 'DELIVERED') ?? [];
   const activeJobs    = jobs?.filter(j => j.status !== 'DELIVERED') ?? [];
@@ -58,12 +61,16 @@ export default function DashboardStats() {
             Today: <span className="text-emerald-400 font-semibold">Rs {todayRevenue.toLocaleString()}</span>
           </span>
           <div className="flex items-center gap-3 w-full">
-            <button className="flex-1 bg-white/10 hover:bg-white/20 text-white py-2.5 rounded-full font-medium text-sm transition-colors border border-white/10">
-              New Job Card
-            </button>
-            <button className="flex-1 bg-white text-slate-900 hover:bg-slate-100 py-2.5 rounded-full font-medium text-sm transition-colors shadow-md">
-              Add Khata
-            </button>
+            <Link href="/jobs" className="flex-1">
+              <button className="w-full bg-white/10 hover:bg-white/20 text-white py-2.5 rounded-full font-medium text-sm transition-colors border border-white/10">
+                New Job Card
+              </button>
+            </Link>
+            <Link href="/khata" className="flex-1">
+              <button className="w-full bg-white text-slate-900 hover:bg-slate-100 py-2.5 rounded-full font-medium text-sm transition-colors shadow-md">
+                Add Customer
+              </button>
+            </Link>
           </div>
         </div>
 

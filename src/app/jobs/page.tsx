@@ -9,11 +9,14 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/u
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import {
   PlusCircle, Camera, Wrench, Car, CheckCircle2,
-  Clock, PackageCheck, Truck, X, Plus, Trash2, ConciergeBell, User,
+  Clock, PackageCheck, Truck, X, Plus, Trash2, ConciergeBell, User, FileText,
+  Lock, BarChart3,
 } from 'lucide-react';
 import { useState } from 'react';
 import { cn } from '@/lib/utils';
 import { compressImageToThumbnail } from '@/lib/image-util';
+import { useLocation } from '@/components/LocationProvider';
+import { useSubscription } from '@/components/SubscriptionProvider';
 
 type Status = JobCard['status'];
 
@@ -31,31 +34,53 @@ const emptyForm = {
   advance_paid: '', status: 'PENDING' as Status,
   services: [] as JobService[],
   assignedStaff: '',
+  customer_id: '',
 };
 
 export default function JobsPage() {
+  const { currentLocationId } = useLocation();
+  const { plan, jobLimit } = useSubscription();
+
   const [createOpen, setCreateOpen]     = useState(false);
   const [updateJob, setUpdateJob]       = useState<JobCard | null>(null);
   const [servicesJob, setServicesJob]   = useState<JobCard | null>(null);
   const [filterStatus, setFilterStatus] = useState<Status | 'ALL'>('ALL');
   const [form, setForm]                 = useState(emptyForm);
-  // catalog picker state: selected catalog id + optional price override
   const [newSvc, setNewSvc]   = useState({ catalogId: '', price: '' });
   const [editSvc, setEditSvc] = useState({ catalogId: '', price: '' });
+  // inline new customer form
+  const [showNewCustomer, setShowNewCustomer] = useState(false);
+  const [newCustomer, setNewCustomer] = useState({ name: '', phone: '' });
+  // invoice customer prompt
+  const [invoiceJob, setInvoiceJob] = useState<JobCard | null>(null);
+  const [walkInName, setWalkInName] = useState('');
+  const [walkInPhone, setWalkInPhone] = useState('');
 
   const allJobs = useLiveQuery(() =>
-    db.jobs.toArray().then(j => j.sort((a, b) => b.created_at - a.created_at))
+    db.jobs.where('location_id').equals(currentLocationId || '').toArray().then(j => j.sort((a, b) => b.created_at - a.created_at)),
+    [currentLocationId]
   );
+
+  // Monthly limit check
+  const startOfMonth = new Date();
+  startOfMonth.setDate(1);
+  startOfMonth.setHours(0,0,0,0);
+  const jobsThisMonth = (allJobs ?? []).filter(j => j.created_at >= startOfMonth.getTime()).length;
+  const isLimitReached = jobLimit !== null && jobsThisMonth >= jobLimit;
 
   const catalog = useLiveQuery(() =>
-    db.service_catalog.toArray().then(s => s.sort((a, b) => a.name.localeCompare(b.name)))
+    db.service_catalog.where('location_id').equals(currentLocationId || '').toArray().then(s => s.sort((a, b) => a.name.localeCompare(b.name))),
+    [currentLocationId]
   );
-
+// ... existing catalog/staff queries ...
   const activeStaff = useLiveQuery(() =>
-    db.staff.filter(s => s.active).toArray().then(s => s.sort((a, b) => a.name.localeCompare(b.name)))
+    db.staff.where('location_id').equals(currentLocationId || '').and(s => !!s.active).toArray().then(s => s.sort((a, b) => a.name.localeCompare(b.name))),
+    [currentLocationId]
   );
 
-  const allTasks = useLiveQuery(() => db.workflow_tasks.toArray());
+  const allTasks = useLiveQuery(() => db.workflow_tasks.where('location_id').equals(currentLocationId || '').toArray(), [currentLocationId]);
+  const customers = useLiveQuery(() => db.customers.toArray());
+  const allInvoices = useLiveQuery(() => db.invoices.where('location_id').equals(currentLocationId || '').toArray(), [currentLocationId]);
 
   const jobs = (allJobs ?? []).filter(j =>
     filterStatus === 'ALL' ? j.status !== 'DELIVERED' : j.status === filterStatus
@@ -87,16 +112,43 @@ export default function JobsPage() {
 
   const formTotal = form.services.reduce((s, svc) => s + svc.price, 0);
 
+  // ── inline add customer ──
+  const handleAddNewCustomer = async () => {
+    if (!newCustomer.name.trim()) return;
+    const id = crypto.randomUUID();
+    await db.customers.add({
+      id,
+      name: newCustomer.name.trim(),
+      phone: newCustomer.phone.trim(),
+      total_udhaar: 0,
+      location_id: currentLocationId || '',
+      created_at: Date.now(),
+      updated_at: Date.now(),
+    });
+    setForm(f => ({ ...f, customer_id: id }));
+    setNewCustomer({ name: '', phone: '' });
+    setShowNewCustomer(false);
+  };
+
   // ── create job ──
   const handleCreate = async () => {
-    if (!form.vehicle_make.trim() || !form.license_plate.trim()) return;
+    if (!form.vehicle_make.trim() || !form.license_plate.trim() || !currentLocationId) return;
+    
+    if (isLimitReached) {
+      alert(`Monthly job limit reached (${jobLimit} jobs). Please upgrade your plan in Settings to add more jobs.`);
+      return;
+    }
+
     const jobId = crypto.randomUUID();
+    const plate = form.license_plate.trim().toUpperCase();
+
     await db.jobs.add({
       id: jobId,
-      customer_id: '',
+      customer_id: form.customer_id,
+      location_id: currentLocationId,
       vehicle_make: form.vehicle_make.trim(),
       vehicle_model: form.vehicle_model.trim(),
-      license_plate: form.license_plate.trim().toUpperCase(),
+      license_plate: plate,
       status: form.status,
       services: form.services,
       total_amount: formTotal,
@@ -105,6 +157,23 @@ export default function JobsPage() {
       updated_at: Date.now(),
     });
 
+    // Auto-create vehicle record if plate doesn't exist yet
+    const existingVehicle = await db.vehicles.filter(v => v.license_plate === plate).first();
+    if (!existingVehicle) {
+      await db.vehicles.add({
+        id: crypto.randomUUID(),
+        customer_id: form.customer_id,
+        make: form.vehicle_make.trim(),
+        model: form.vehicle_model.trim(),
+        license_plate: plate,
+        created_at: Date.now(),
+        updated_at: Date.now(),
+      });
+    } else if (form.customer_id && !existingVehicle.customer_id) {
+      // Link customer to existing vehicle if not already linked
+      await db.vehicles.update(existingVehicle.id, { customer_id: form.customer_id, updated_at: Date.now() });
+    }
+
     // Auto-create a workflow task linked to this job
     const taskStatus =
       form.status === 'IN_PROGRESS' ? 'IN_PROGRESS' :
@@ -112,7 +181,8 @@ export default function JobsPage() {
     await db.workflow_tasks.add({
       id: crypto.randomUUID(),
       job_id: jobId,
-      title: `${form.vehicle_make.trim()} ${form.vehicle_model.trim()} — ${form.license_plate.trim().toUpperCase()}`,
+      location_id: currentLocationId,
+      title: `${form.vehicle_make.trim()} ${form.vehicle_model.trim()} — ${plate}`,
       mechanic: form.assignedStaff,
       priority: 'MEDIUM',
       status: taskStatus,
@@ -123,6 +193,88 @@ export default function JobsPage() {
     setForm(emptyForm);
     setNewSvc({ catalogId: '', price: '' });
     setCreateOpen(false);
+  };
+
+  // ── generate invoice from job ──
+  const handleGenerateInvoice = async (job: JobCard) => {
+    const existing = (allInvoices ?? []).find(i => i.job_id === job.id);
+    if (existing) {
+      window.open(`/en/invoices/${existing.id}`, '_blank');
+      return;
+    }
+    // If no customer linked, prompt for name first
+    if (!job.customer_id) {
+      setInvoiceJob(job);
+      setWalkInName('');
+      setWalkInPhone('');
+      return;
+    }
+    await createInvoice(job, null);
+  };
+
+  const createInvoice = async (job: JobCard, walkIn: { name: string; phone: string } | null) => {
+    let customerId = job.customer_id;
+    let customerName = 'Walk-in Customer';
+    let customerPhone = '';
+
+    if (walkIn && walkIn.name.trim()) {
+      // Create a real customer record
+      customerId = crypto.randomUUID();
+      customerName = walkIn.name.trim();
+      customerPhone = walkIn.phone.trim();
+      await db.customers.add({
+        id: customerId,
+        name: customerName,
+        phone: customerPhone,
+        total_udhaar: 0,
+        location_id: currentLocationId || '',
+        created_at: Date.now(),
+        updated_at: Date.now(),
+      });
+      // Link customer to job and vehicle
+      await db.jobs.update(job.id, { customer_id: customerId, updated_at: Date.now() });
+      const vehicle = await db.vehicles.filter(v => v.license_plate === job.license_plate).first();
+      if (vehicle && !vehicle.customer_id) {
+        await db.vehicles.update(vehicle.id, { customer_id: customerId, updated_at: Date.now() });
+      }
+    } else if (customerId) {
+      const c = customers?.find(c => c.id === customerId);
+      customerName = c?.name ?? 'Walk-in Customer';
+      customerPhone = c?.phone ?? '';
+    }
+
+    const count = (allInvoices?.length ?? 0) + 1;
+    const invoiceId = crypto.randomUUID();
+    const advance = job.advance_paid ?? 0;
+    const balance = job.total_amount - advance;
+    await db.invoices.add({
+      id: invoiceId,
+      invoice_number: `INV-${String(count).padStart(4, '0')}`,
+      job_id: job.id,
+      customer_id: customerId ?? '',
+      location_id: currentLocationId || job.location_id,
+      customer_name: customerName,
+      customer_phone: customerPhone,
+      vehicle_make: job.vehicle_make,
+      vehicle_model: job.vehicle_model,
+      license_plate: job.license_plate,
+      services: job.services ?? [],
+      total_amount: job.total_amount,
+      advance_paid: advance,
+      balance,
+      status: balance <= 0 ? 'PAID' : advance > 0 ? 'PARTIAL' : 'UNPAID',
+      created_at: Date.now(),
+    });
+    setInvoiceJob(null);
+    window.open(`/en/invoices/${invoiceId}`, '_blank');
+  };
+
+  // ── delete job ──
+  const handleDeleteJob = async (job: JobCard) => {
+    if (!confirm(`Delete job for ${job.vehicle_make} ${job.vehicle_model} · ${job.license_plate}?`)) return;
+    await db.workflow_tasks.filter(t => t.job_id === job.id).delete();
+    await db.invoices.filter(i => i.job_id === job.id).delete();
+    await db.jobs.delete(job.id);
   };
 
   // ── status update (syncs workflow tasks) ──
@@ -221,7 +373,9 @@ export default function JobsPage() {
               onPriceChange(cat ? String(cat.default_price) : '');
             }}>
               <SelectTrigger className="flex-1">
-                <SelectValue placeholder="Select service..." />
+                <SelectValue placeholder="Select service...">
+                  {catalog?.find(c => c.id === value)?.name || "Select service..."}
+                </SelectValue>
               </SelectTrigger>
               <SelectContent>
                 {catalog.map(c => (
@@ -254,12 +408,40 @@ export default function JobsPage() {
       {/* Header */}
       <div className="my-6 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
         <div>
-          <h1 className="text-3xl font-bold tracking-tight text-slate-900 dark:text-white">Job Cards</h1>
+          <div className="flex items-center gap-3">
+            <h1 className="text-3xl font-bold tracking-tight text-slate-900 dark:text-white">Job Cards</h1>
+            {jobLimit !== null && (
+              <div className={cn(
+                "px-2.5 py-1 rounded-full text-[10px] font-bold uppercase tracking-wider border",
+                isLimitReached 
+                  ? "bg-red-50 border-red-200 text-red-600 dark:bg-red-900/20 dark:border-red-800" 
+                  : "bg-slate-50 border-slate-200 text-slate-500 dark:bg-slate-800 dark:border-slate-700"
+              )}>
+                {jobsThisMonth} / {jobLimit} Jobs <span className="opacity-60 ml-0.5">This Month</span>
+              </div>
+            )}
+          </div>
           <p className="text-slate-500 text-sm mt-1">Manage ongoing vehicle repairs and workflows.</p>
         </div>
-        <Button onClick={() => setCreateOpen(true)} className="rounded-full px-5">
-          <PlusCircle className="mr-2 h-4 w-4" /> Create Job
-        </Button>
+        <div className="flex items-center gap-3">
+          <Button 
+            variant="outline"
+            className="rounded-full px-5 border-2 border-dashed border-slate-200"
+            onClick={() => window.location.href = '/reports'}
+          >
+            <BarChart3 className="mr-2 h-4 w-4 text-orange-500" /> Summary Report
+          </Button>
+          <Button 
+            onClick={() => isLimitReached ? window.location.href = '/profile?tab=subscription' : setCreateOpen(true)} 
+            className={cn("rounded-full px-5", isLimitReached && "bg-orange-600 hover:bg-orange-700")}
+          >
+            {isLimitReached ? (
+              <><Lock className="mr-2 h-4 w-4" /> Upgrade to Add</>
+            ) : (
+              <><PlusCircle className="mr-2 h-4 w-4" /> Create Job</>
+            )}
+          </Button>
+        </div>
       </div>
 
       {/* Status filter tabs */}
@@ -314,12 +496,24 @@ export default function JobsPage() {
                     </p>
                     <p className="font-mono text-xs text-slate-400 mt-0.5">{job.license_plate}</p>
                     {(() => {
+                      const customerName = job.customer_id
+                        ? customers?.find(c => c.id === job.customer_id)?.name
+                        : null;
                       const mechanic = (allTasks ?? []).find(t => t.job_id === job.id && t.mechanic)?.mechanic;
-                      return mechanic ? (
-                        <p className="flex items-center gap-1 text-xs text-orange-500 mt-1 font-medium">
-                          <User className="h-3 w-3" /> {mechanic}
-                        </p>
-                      ) : null;
+                      return (
+                        <div className="flex flex-col gap-0.5 mt-1">
+                          {customerName && (
+                            <p className="flex items-center gap-1 text-xs text-slate-500 dark:text-slate-400 font-medium">
+                              <User className="h-3 w-3" /> {customerName}
+                            </p>
+                          )}
+                          {mechanic && (
+                            <p className="flex items-center gap-1 text-xs text-orange-500 font-medium">
+                              <Wrench className="h-3 w-3" /> {mechanic}
+                            </p>
+                          )}
+                        </div>
+                      );
                     })()}
                   </div>
                   <span className={cn('flex items-center gap-1.5 text-white text-xs font-semibold px-3 py-1.5 rounded-full', cfg.color)}>
@@ -393,6 +587,20 @@ export default function JobsPage() {
                   >
                     <ConciergeBell className="h-3.5 w-3.5" /> Services
                   </button>
+                  <button
+                    onClick={() => handleGenerateInvoice(job)}
+                    className="p-2 rounded-full border border-slate-200 dark:border-slate-700 hover:bg-orange-50 dark:hover:bg-orange-900/20 hover:border-orange-300 transition-colors"
+                    title="Generate Invoice"
+                  >
+                    <FileText className="h-4 w-4 text-slate-500 hover:text-orange-500" />
+                  </button>
+                  <button
+                    onClick={() => handleDeleteJob(job)}
+                    className="p-2 rounded-full border border-slate-200 dark:border-slate-700 hover:bg-red-50 dark:hover:bg-red-900/20 hover:border-red-300 transition-colors"
+                    title="Delete job"
+                  >
+                    <Trash2 className="h-4 w-4 text-slate-400 hover:text-red-500" />
+                  </button>
                   <label className="cursor-pointer">
                     <input type="file" accept="image/*" className="hidden" onChange={e => handleImageUpload(job.id, e)} />
                     <div className="p-2 rounded-full border border-slate-200 dark:border-slate-700 hover:bg-slate-50 dark:hover:bg-slate-700 transition-colors">
@@ -407,10 +615,78 @@ export default function JobsPage() {
       )}
 
       {/* ── Create Job Dialog ── */}
-      <Dialog open={createOpen} onOpenChange={o => { setCreateOpen(o); if (!o) { setForm(emptyForm); setNewSvc({ catalogId: '', price: '' }); } }}>
+      <Dialog open={createOpen} onOpenChange={o => { setCreateOpen(o); if (!o) { setForm(emptyForm); setNewSvc({ catalogId: '', price: '' }); setShowNewCustomer(false); setNewCustomer({ name: '', phone: '' }); } }}>
         <DialogContent className="max-h-[90vh] overflow-y-auto">
           <DialogHeader><DialogTitle>Create Job Card</DialogTitle></DialogHeader>
           <div className="space-y-4 pt-2">
+            <div className="space-y-1.5">
+              <div className="flex items-center justify-between">
+                <Label>Customer</Label>
+                <button
+                  type="button"
+                  onClick={() => setShowNewCustomer(v => !v)}
+                  className="text-xs text-orange-500 hover:text-orange-600 font-medium flex items-center gap-1"
+                >
+                  <PlusCircle className="h-3 w-3" />
+                  {showNewCustomer ? 'Cancel' : 'New Customer'}
+                </button>
+              </div>
+
+              {showNewCustomer ? (
+                <div className="space-y-2 p-3 rounded-2xl bg-orange-50 dark:bg-orange-900/10 border border-orange-100 dark:border-orange-900">
+                  <Input
+                    placeholder="Customer name *"
+                    value={newCustomer.name}
+                    onChange={e => setNewCustomer(c => ({ ...c, name: e.target.value }))}
+                  />
+                  <Input
+                    placeholder="Phone (03xx-xxxxxxx)"
+                    value={newCustomer.phone}
+                    onChange={e => setNewCustomer(c => ({ ...c, phone: e.target.value }))}
+                  />
+                  <Button
+                    type="button"
+                    size="sm"
+                    className="w-full"
+                    onClick={handleAddNewCustomer}
+                    disabled={!newCustomer.name.trim()}
+                  >
+                    Add & Select Customer
+                  </Button>
+                </div>
+              ) : (
+                <>
+                  {customers && customers.length > 0 ? (
+                    <Select value={form.customer_id} onValueChange={v => setForm(f => ({ ...f, customer_id: v ?? '' }))}>
+                      <SelectTrigger>
+                        <SelectValue placeholder="Select customer (optional)...">
+                          {customers?.find(c => c.id === form.customer_id)?.name || "Select customer (optional)..."}
+                        </SelectValue>
+                      </SelectTrigger>
+                      <SelectContent>
+                        {customers.map(c => (
+                          <SelectItem key={c.id} value={c.id}>{c.name}{c.phone ? ` — ${c.phone}` : ''}</SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  ) : (
+                    <p className="text-xs text-slate-400 py-1">
+                      No customers yet.{' '}
+                      <button type="button" onClick={() => setShowNewCustomer(true)} className="text-orange-500 underline">
+                        Add one now
+                      </button>
+                    </p>
+                  )}
+                  {form.customer_id && (
+                    <p className="text-xs text-emerald-600 flex items-center gap-1">
+                      <User className="h-3 w-3" />
+                      {customers?.find(c => c.id === form.customer_id)?.name} selected
+                    </p>
+                  )}
+                </>
+              )}
+            </div>
+
             <div className="grid grid-cols-2 gap-3">
               <div className="space-y-1.5">
                 <Label>Make <span className="text-red-500">*</span></Label>
@@ -467,7 +743,9 @@ export default function JobsPage() {
                   onValueChange={v => setForm(f => ({ ...f, assignedStaff: v ?? '' }))}
                 >
                   <SelectTrigger>
-                    <SelectValue placeholder="Select staff member..." />
+                    <SelectValue placeholder="Select staff member...">
+                      {activeStaff?.find(s => s.id === form.assignedStaff)?.name || "Select staff member..."}
+                    </SelectValue>
                   </SelectTrigger>
                   <SelectContent>
                     {activeStaff.map(s => (
